@@ -1,0 +1,95 @@
+import java.util.regex.Pattern
+
+ext {
+    flavorNameList = new ArrayList<String>()
+}
+
+this.project.afterEvaluate {
+    project ->
+//    获得build task
+        def buildTask = project.tasks.getByName('build')
+        if (buildTask == null) {
+            throw GradleException('the build task is not found')
+        }
+        buildTask.doLast {
+            copyTask.execute()
+        }
+}
+
+//自定义copyApk task
+task copyTask {
+    doLast {
+        //遍历
+        flavorNameList.each { def content ->
+            def fileName = "${content}.skin"
+//        拷贝文件的始发地
+            def sourceFile = "./build/outputs/apk/${content}/debug/" + fileName
+//        指定文件拷贝的目的地
+            def destationFile = new File(project.getRootDir().path + "/skin/")
+            try {
+//            判断文件夹是否存在
+                if (!destationFile.exists()) {
+                    destationFile.mkdir()
+                }
+                //拷贝
+                copy {
+                    from sourceFile
+                    into destationFile
+                }
+                println("执行完成")
+            } catch (Exception e) {
+                e.printStackTrace()
+            }
+        }
+    }
+}
+
+static def getFileNameWithoutSuffix(File file){
+    def fileName = file.getName()
+    return fileName.substring(0, fileName.lastIndexOf("."))
+}
+
+
+def getSpellStr(List<String> strs,String symboStr){
+    StringBuilder sb = new StringBuilder()
+    strs.each {
+        sb.append(it+symboStr)
+    }
+    if (strs.size()>0){
+        return sb.toString().substring(0,sb.length()-symboStr.length())
+    }
+    return sb.toString()
+}
+
+static def getMatchTextList(File file,String regex,String prefix){
+    if (file.isDirectory()){
+        List<File> files = fileTree(file)
+        def names= new ArrayList<String>()
+        files.each {
+            names.addAll(getNameList(it,regex,prefix))
+        }
+    }else {
+        return   getNameList(file,regex,prefix)
+    }
+}
+
+def getNameList(File file,String regex,String prefix){
+    List<String> names = new ArrayList<>()
+    def matchList = matchRegex(file.getText(),regex)
+    matchList.each {
+        text ->
+            def name = text.substring(prefix.length(),text.length())
+            names.add(name)
+    }
+    return names
+}
+
+def matchRegex(String text,String regex){
+    def list = new ArrayList<String>()
+    def pattern = Pattern.compile(regex)
+    def matcher = pattern.matcher(text)
+    while (matcher.find()){
+        list.add(matcher.group())
+    }
+    return list
+}

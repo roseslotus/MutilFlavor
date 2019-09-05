@@ -1,0 +1,198 @@
+import java.util.regex.Pattern
+
+apply plugin: 'com.android.application'
+ext {
+    flavorNameList = new ArrayList<String>()
+}
+android {
+    compileSdkVersion 28
+    buildToolsVersion "29.0.0"
+    defaultConfig {
+        applicationId "com.example.flavors"
+        minSdkVersion 19
+        targetSdkVersion 28
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    flavorDimensions "default"
+    productFlavors {
+        bakery {
+        }
+
+        fresh {
+        }
+    }
+
+    sourceSets {
+//        //用各自对应的资源文件路径
+        bakery.res.srcDirs = ['src/main/res-bakery']
+        fresh.res.srcDirs = ['src/main/res-fresh']
+
+        bakery.assets.srcDirs = ['src/main/bakery-asserts']
+        fresh.assets.srcDirs = ['src/main/fresh-asserts']
+    }
+
+    productFlavors.all {flavor ->
+        flavorNameList.add(flavor.name)
+        def path =  project.getRootDir().getAbsolutePath()
+            def assertFlavorPath =path+"/app/src/main/${flavor.name}-asserts"
+            def assertFlavorFile = new File(assertFlavorPath)
+            if (!assertFlavorFile.exists()){
+                assertFlavorFile.mkdirs()
+            }
+            def flavorResFile = new File("src/main/res-${flavor.name}")
+            if(!flavorResFile.exists()){
+               def resFiles = fileTree(flavorResFile)
+                def drawableNames = new ArrayList<String>()
+                def mipmapNames = new ArrayList<String>()
+                def colorNames = new ArrayList<String>()
+                resFiles.each {
+                    resFile ->
+                        //获取colors文件
+                        if(resFile.getAbsolutePath().endsWith("colors.xml")){
+                            def regex = "(name=\"[a-zA-Z_0-9]+)"
+                            def list = getMatchTextList(resFile,regex,"name=\"")
+                            colorNames.addAll(list)
+                        }else if(resFile.getAbsolutePath().contains("drawable")){
+                            drawableNames.add(getFileNameWithoutSuffix(resFile))
+                        }else if(resFile.getAbsolutePath().contains("mipmap")){
+                            mipmapNames.add(getFileNameWithoutSuffix(resFile))
+                        }
+                }
+                def colorSpellStr= getSpellStr(colorNames,",")
+                def drawableSpellStr= getSpellStr(drawableNames,",")
+                def mipmapSpellStr= getSpellStr(mipmapNames,",")
+
+                def strs = new ArrayList<String>()
+                strs.add(drawableSpellStr)
+                strs.add("")
+                strs.add(colorSpellStr)
+                strs.add(mipmapSpellStr)
+                def str = getSpellStr(strs,"|")
+                def resNameFile =new File(assertFlavorPath,"res_name.txt")
+                if (!resNameFile.exists()){
+                    resNameFile.createNewFile()
+                }
+                resNameFile.write(str)
+            }
+    }
+
+    //android studio 3 的配置
+    android.applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def outputFile = output.outputFile
+            if (outputFile != null && outputFile.name.endsWith('.apk')) {
+                outputFileName ="${variant.productFlavors[0].name}.skin"
+            }else {//这里使用之前定义apk文件名称
+                outputFileName = "${variant.productFlavors[0].name}.skin"
+            }
+
+        }
+    }
+}
+
+this.project.afterEvaluate {
+    project ->
+//    获得build task
+        def buildTask = project.tasks.getByName('build')
+        if (buildTask == null) {
+            throw GradleException('the build task is not found')
+        }
+        buildTask.doLast {
+            copyTask.execute()
+        }
+}
+
+//自定义copyApk task
+task copyTask {
+    doLast {
+        //遍历
+        flavorNameList.each { def content ->
+            def fileName = "${content}.skin"
+//        拷贝文件的始发地
+            def sourceFile = "./build/outputs/apk/${content}/debug/" + fileName
+//        指定文件拷贝的目的地
+            def destationFile = new File(project.getRootDir().path + "/skin/")
+            try {
+//            判断文件夹是否存在
+                if (!destationFile.exists()) {
+                    destationFile.mkdir()
+                }
+                //拷贝
+                copy {
+                    from sourceFile
+                    into destationFile
+                }
+                println("执行完成")
+            } catch (Exception e) {
+                e.printStackTrace()
+            }
+        }
+    }
+}
+
+ def getFileNameWithoutSuffix(File file){
+    def fileName = file.getName()
+    return fileName.substring(0, fileName.lastIndexOf("."))
+}
+
+
+def getSpellStr(List<String> strs,String symboStr){
+    StringBuilder sb = new StringBuilder()
+    strs.each {
+        sb.append(it+symboStr)
+    }
+    if (strs.size()>0){
+        return sb.toString().substring(0,sb.length()-symboStr.length())
+    }
+    return sb.toString()
+}
+
+ def getMatchTextList(File file,String regex,String prefix){
+    if (file.isDirectory()){
+        List<File> files = fileTree(file)
+        def names= new ArrayList<String>()
+        files.each {
+            names.addAll(getNameList(it,regex,prefix))
+        }
+    }else {
+        return   getNameList(file,regex,prefix)
+    }
+}
+
+def getNameList(File file,String regex,String prefix){
+    List<String> names = new ArrayList<>()
+    def matchList = matchRegex(file.getText(),regex)
+    matchList.each {
+        text ->
+            def name = text.substring(prefix.length(),text.length())
+            names.add(name)
+    }
+    return names
+}
+
+def matchRegex(String text,String regex){
+    def list = new ArrayList<String>()
+    def pattern = Pattern.compile(regex)
+    def matcher = pattern.matcher(text)
+    while (matcher.find()){
+        list.add(matcher.group())
+    }
+    return list
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'com.android.support.test:runner:1.0.2'
+    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+}

@@ -1,0 +1,1 @@
+ic_launcher_background||colorPrimary,colorPrimaryDark,colorAccent,color_333333,color_666666|ic_launcher,ic_launcher_round
